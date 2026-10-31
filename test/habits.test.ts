@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { summarizeHabit, toHabitPayload } from "../src/habits.ts";
+import { summarizeHabit, toHabitPatch, toHabitPayload } from "../src/habits.ts";
 import type { Hours } from "../src/tasks.ts";
 
 const FOCUS: Hours = {
@@ -74,4 +74,16 @@ test("habit summaries name the calendar", () => {
   );
   assert.equal(summary.calendar, "Focus");
   assert.deepEqual(summary.days, ["MONDAY"]);
+});
+
+test("habit patches carry only the changed fields", () => {
+  const current = { minMinutes: 30, maxMinutes: 60 };
+  assert.deepEqual(toHabitPatch({ title: "Walk" }, current), { title: "Walk" });
+  assert.deepEqual(toHabitPatch({ hours: FOCUS }, current), {
+    organizer: { timePolicyType: "CUSTOM", timeSchemeId: "fo-1" },
+    eventType: "SOLO_WORK",
+  });
+  assert.deepEqual(toHabitPatch({ minMinutes: 45, maxMinutes: 45 }, current), { durationMinMins: 45, durationMaxMins: 45 });
+  assert.throws(() => toHabitPatch({}, current), /at least one field/);
+  assert.throws(() => toHabitPatch({ maxMinutes: 15 }, current), /longer than maximum/);
 });

@@ -29,6 +29,7 @@ export interface ApiTask {
   snoozeUntil?: string | null;
   priority?: Priority;
   alwaysPrivate?: boolean;
+  atRisk?: boolean;
 }
 
 export interface TaskFields {
@@ -104,6 +105,7 @@ export function summarizeTask(task: ApiTask, hoursById: Map<string, Hours>) {
     id: task.id,
     title: task.title,
     status: task.status,
+    atRisk: task.atRisk,
     category: task.eventCategory,
     hours: hoursById.get(task.timeSchemeId)?.title ?? task.timeSchemeId,
     durationMinutes: chunksToMinutes(task.timeChunksRequired),

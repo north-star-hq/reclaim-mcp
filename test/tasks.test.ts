@@ -62,10 +62,12 @@ test("task summaries report minutes and the Hours title", () => {
       maxChunkSize: 3,
       timeSchemeId: "fo-1",
       notes: "",
+      atRisk: true,
     },
     new Map(HOURS.map((h) => [h.id, h])),
   );
   assert.equal(summary.hours, "Focus");
+  assert.equal(summary.atRisk, true);
   assert.equal(summary.durationMinutes, 180);
   assert.equal(summary.remainingMinutes, 135);
   assert.equal(summary.minBlockMinutes, 45);

@@ -9,13 +9,15 @@ Unofficial: not affiliated with or endorsed by Reclaim.ai. MIT licensed.
 | Tool | What it does |
 |---|---|
 | `list_hours` | Hours with their weekly windows and the calendar tasks land on |
-| `update_hours` | Change the weekly windows of one Hours; only the days you pass change, an empty list removes a day |
-| `list_tasks`, `get_task` | Tasks with durations and block sizes in minutes |
-| `create_task`, `update_task` | Title, total minutes, min/max block minutes, Hours by name, Work/Personal, due, not-before, priority, notes |
+| `update_hours` | Change one Hours' weekly windows (only the days you pass) and/or the calendar its tasks land on |
+| `list_tasks`, `get_task` | Tasks with durations and block sizes in minutes, and whether Reclaim flags them at risk |
+| `create_task`, `update_task` | Title, total minutes, min/max block minutes, Hours by name, Work/Personal, due, not-before, priority, notes; `startAt` books the first block at an exact time |
 | `complete_task`, `delete_task` | Mark done, or delete with its blocks |
-| `list_task_blocks` | Scheduled blocks and which calendar each is on |
-| `list_habits`, `set_habit_enabled` | Habits and whether they are on; turn one on or off |
-| `create_habit` | Weekly habit: block length, days, ideal time, Hours by name; lands on the Hours' task calendar unless another is named |
+| `list_blocks` | Scheduled task and habit blocks: time, calendar, locked, and the `blockId` the block tools take |
+| `lock_block`, `unlock_block` | Lock a block where it is or at a new start time, or let Reclaim move it again |
+| `skip_habit_block`, `complete_habit_block` | Skip one habit occurrence, or mark one done |
+| `list_habits`, `create_habit`, `update_habit` | Weekly habits: block length, days, ideal time, Hours by name, calendar |
+| `set_habit_enabled` | Turn a habit on or off |
 
 ## Local setup (macOS)
 

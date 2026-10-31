@@ -38,6 +38,44 @@ export function toHabitPayload(fields: HabitFields): Record<string, unknown> {
   };
 }
 
+export interface HabitPatchFields {
+  title?: string;
+  minMinutes?: number;
+  maxMinutes?: number;
+  days?: Weekday[];
+  idealTime?: string;
+  hours?: Hours;
+  calendarId?: number;
+  category?: Category;
+  starting?: string;
+}
+
+export function toHabitPatch(
+  fields: HabitPatchFields,
+  current: { minMinutes: number; maxMinutes: number },
+): Record<string, unknown> {
+  const minMinutes = fields.minMinutes ?? current.minMinutes;
+  const maxMinutes = fields.maxMinutes ?? current.maxMinutes;
+  if (minMinutes > maxMinutes) {
+    throw new Error(`Minimum (${minMinutes} min) would be longer than maximum (${maxMinutes} min); pass both`);
+  }
+  const patch: Record<string, unknown> = {};
+  if (fields.title !== undefined) patch.title = fields.title;
+  if (fields.minMinutes !== undefined) patch.durationMinMins = fields.minMinutes;
+  if (fields.maxMinutes !== undefined) patch.durationMaxMins = fields.maxMinutes;
+  if (fields.days !== undefined) patch.recurrence = { frequency: "WEEKLY", idealDays: fields.days, interval: 1 };
+  if (fields.idealTime !== undefined) patch.idealTime = `${fields.idealTime}:00`;
+  if (fields.hours !== undefined) {
+    patch.organizer = { timePolicyType: fields.hours.policyType, timeSchemeId: fields.hours.id };
+  }
+  const category = fields.category ?? fields.hours?.taskCategory ?? undefined;
+  if (category !== undefined) patch.eventType = category === "PERSONAL" ? "PERSONAL" : "SOLO_WORK";
+  if (fields.calendarId !== undefined) patch.calendarId = fields.calendarId;
+  if (fields.starting !== undefined) patch.starting = fields.starting;
+  if (Object.keys(patch).length === 0) throw new Error("Pass at least one field to change");
+  return patch;
+}
+
 export function summarizeHabit(habit: any, calendarNames: Map<number, string>) {
   const series = habit.activeSeries ?? habit.series;
   const calendarId = series?.calendarId ?? habit.calendarId;
