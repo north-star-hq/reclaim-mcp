@@ -73,3 +73,21 @@ test("task summaries report minutes and the Hours title", () => {
   assert.equal(summary.minBlockMinutes, 45);
   assert.equal(summary.notes, undefined);
 });
+
+test("eventColor is sent only when passed, and a null color reads back as unset", () => {
+  assert.deepEqual(toTaskPayload({ eventColor: "PEACOCK" }), { eventColor: "PEACOCK" });
+  assert.equal("eventColor" in toTaskPayload({ title: "x" }), false);
+  const base = {
+    id: 1,
+    title: "t",
+    status: "NEW",
+    eventCategory: "WORK" as const,
+    timeChunksRequired: 1,
+    minChunkSize: 1,
+    maxChunkSize: 1,
+    timeSchemeId: "ws-1",
+  };
+  const byId = new Map(HOURS.map((h) => [h.id, h]));
+  assert.equal(summarizeTask({ ...base, eventColor: "BASIL" }, byId).eventColor, "BASIL");
+  assert.equal(summarizeTask({ ...base, eventColor: null }, byId).eventColor, undefined);
+});

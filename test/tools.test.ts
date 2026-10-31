@@ -119,6 +119,27 @@ test("update_task patches only the passed fields", async () => {
   assert.deepEqual(calls.find((c) => c.method === "PATCH"), { method: "PATCH", path: "/tasks/42", body: { maxChunkSize: 4 } });
 });
 
+test("create_task and update_task pass eventColor through and report it back", async () => {
+  const { client: reclaim, calls } = fakeReclaim();
+  const client = await connect(reclaim);
+  const created = await client.callTool({
+    name: "create_task",
+    arguments: { title: "Gym", durationMinutes: 60, eventColor: "SAGE" },
+  });
+  assert.equal((calls.find((c) => c.method === "POST")?.body as any).eventColor, "SAGE");
+  assert.equal(JSON.parse((created.content as any)[0].text).eventColor, "SAGE");
+  await client.callTool({ name: "update_task", arguments: { taskId: 42, eventColor: "TOMATO" } });
+  assert.deepEqual(calls.find((c) => c.method === "PATCH"), { method: "PATCH", path: "/tasks/42", body: { eventColor: "TOMATO" } });
+});
+
+test("an eventColor outside Reclaim's enum is a tool error, not a Reclaim call", async () => {
+  const { client: reclaim, calls } = fakeReclaim();
+  const client = await connect(reclaim);
+  const result = await client.callTool({ name: "update_task", arguments: { taskId: 42, eventColor: "PURPLE" } });
+  assert.equal(result.isError, true);
+  assert.equal(calls.filter((c) => c.method === "PATCH").length, 0);
+});
+
 test("bad input comes back as a tool error, not a Reclaim call", async () => {
   const { client: reclaim, calls } = fakeReclaim();
   const client = await connect(reclaim);

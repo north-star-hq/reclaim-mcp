@@ -14,7 +14,15 @@ import { loadCalendarNames, resolveCalendar } from "./calendars.ts";
 import { summarizeHabit, toHabitPatch, toHabitPayload, WEEKDAYS } from "./habits.ts";
 import { applyWindows, summarizeHours } from "./hours.ts";
 import type { ReclaimClient } from "./reclaim.ts";
-import { type ApiTask, type Hours, resolveHours, summarizeTask, type TaskFields, toTaskPayload } from "./tasks.ts";
+import {
+  type ApiTask,
+  EVENT_COLORS,
+  type Hours,
+  resolveHours,
+  summarizeTask,
+  type TaskFields,
+  toTaskPayload,
+} from "./tasks.ts";
 
 const ACTIVE_STATUSES = new Set(["NEW", "SCHEDULED", "IN_PROGRESS"]);
 
@@ -38,6 +46,7 @@ const taskFieldShape = {
   priority: z.enum(["P1", "P2", "P3", "P4"]).optional().describe("P1 is critical, P4 is low"),
   notes: z.string().optional(),
   alwaysPrivate: z.boolean().optional().describe("Hide the title on shared calendars"),
+  eventColor: z.enum(EVENT_COLORS).optional().describe("Color of the task's calendar blocks"),
 };
 
 const habitDays = z.array(z.enum(WEEKDAYS)).min(1).describe("Days of the week to schedule one block on");

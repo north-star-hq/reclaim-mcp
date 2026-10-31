@@ -4,6 +4,23 @@ export const CHUNK_MINUTES = 15;
 export type Category = "WORK" | "PERSONAL";
 export type Priority = "P1" | "P2" | "P3" | "P4";
 
+// The EventColor enum in Reclaim's OpenAPI spec: https://api.app.reclaim.ai/swagger/reclaim-api-0.1.yml
+export const EVENT_COLORS = [
+  "NONE",
+  "LAVENDER",
+  "SAGE",
+  "GRAPE",
+  "FLAMINGO",
+  "BANANA",
+  "TANGERINE",
+  "PEACOCK",
+  "GRAPHITE",
+  "BLUEBERRY",
+  "BASIL",
+  "TOMATO",
+] as const;
+export type EventColor = (typeof EVENT_COLORS)[number];
+
 export interface Hours {
   id: string;
   title: string;
@@ -30,6 +47,7 @@ export interface ApiTask {
   priority?: Priority;
   alwaysPrivate?: boolean;
   atRisk?: boolean;
+  eventColor?: EventColor | null;
 }
 
 export interface TaskFields {
@@ -44,6 +62,7 @@ export interface TaskFields {
   notBefore?: string;
   priority?: Priority;
   alwaysPrivate?: boolean;
+  eventColor?: EventColor;
 }
 
 export function minutesToChunks(minutes: number): number {
@@ -78,6 +97,7 @@ export function toTaskPayload(fields: TaskFields): Record<string, unknown> {
   if (fields.notBefore !== undefined) payload.snoozeUntil = toUtcIso(fields.notBefore);
   if (fields.priority !== undefined) payload.priority = fields.priority;
   if (fields.alwaysPrivate !== undefined) payload.alwaysPrivate = fields.alwaysPrivate;
+  if (fields.eventColor !== undefined) payload.eventColor = fields.eventColor;
   return payload;
 }
 
@@ -116,6 +136,7 @@ export function summarizeTask(task: ApiTask, hoursById: Map<string, Hours>) {
     notBefore: task.snoozeUntil ?? undefined,
     priority: task.priority,
     alwaysPrivate: task.alwaysPrivate,
+    eventColor: task.eventColor ?? undefined,
     notes: task.notes ? task.notes : undefined,
   };
 }
