@@ -1,8 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import {
+  DAY_MS,
+  DEFAULT_SETTLE_MS,
+  isoDate,
+  isReclaimBlock,
+  loadBlock,
+  settledBlock,
+  settledTaskBlocks,
+  summarizeBlock,
+} from "./blocks.ts";
+import { loadCalendarNames, resolveCalendar } from "./calendars.ts";
 import { summarizeHabit, toHabitPatch, toHabitPayload, WEEKDAYS } from "./habits.ts";
 import { applyWindows, summarizeHours } from "./hours.ts";
-import { type ReclaimClient, ReclaimApiError } from "./reclaim.ts";
+import type { ReclaimClient } from "./reclaim.ts";
 import { type ApiTask, type Hours, resolveHours, summarizeTask, type TaskFields, toTaskPayload } from "./tasks.ts";
 
 const ACTIVE_STATUSES = new Set(["NEW", "SCHEDULED", "IN_PROGRESS"]);
@@ -38,42 +49,16 @@ const blockId = z.string().describe("blockId from list_blocks");
 
 type TaskInput = Omit<TaskFields, "hoursId"> & { hours?: string };
 
-const DAY_MS = 86_400_000;
-const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-
 function text(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
 }
 
-function parseBlockId(id: string): { calendarId: number; eventId: string } {
-  const slash = id.indexOf("/");
-  const calendarId = Number(id.slice(0, slash));
-  const eventId = id.slice(slash + 1);
-  if (slash < 1 || !Number.isInteger(calendarId) || !/^[A-Za-z0-9_-]+$/.test(eventId)) {
-    throw new Error(`"${id}" is not a blockId from list_blocks`);
-  }
-  return { calendarId, eventId };
-}
-
 export function createServer(reclaim: ReclaimClient, options: { settleMs?: number } = {}): McpServer {
   const server = new McpServer({ name: "reclaim", version: "0.1.0" });
-  const settleMs = options.settleMs ?? 20_000;
+  const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
 
   const loadHours = () => reclaim.get<Hours[]>("/timeschemes");
   const hoursMap = (all: Hours[]) => new Map(all.map((h) => [h.id, h]));
-
-  async function loadCalendarNames(): Promise<Map<number, string>> {
-    const accounts = await reclaim.get<any[]>("/accounts");
-    return new Map(accounts.flatMap((a) => (a.connectedCalendars ?? []).map((c: any) => [c.id, c.name] as [number, string])));
-  }
-
-  function resolveCalendar(names: Map<number, string>, ref: string): number {
-    const wanted = ref.trim().toLowerCase();
-    const matches = [...names].filter(([id, name]) => String(id) === ref || name.toLowerCase() === wanted);
-    if (matches.length === 1) return matches[0][0];
-    const all = [...names.values()].map((n) => `"${n}"`).join(", ");
-    throw new Error(`Calendar "${ref}" ${matches.length ? "matches more than one" : "matches none"} of: ${all}`);
-  }
 
   async function buildPayload(input: TaskInput) {
     const { hours: hoursRef, ...rest } = input;
@@ -85,65 +70,6 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       fields.category ??= hours.taskCategory ?? undefined;
     }
     return { payload: toTaskPayload(fields), hoursById: hoursMap(all) };
-  }
-
-  function summarizeBlock(event: any, calendarNames: Map<number, string>) {
-    return {
-      blockId: event.key ?? `${event.calendarId}/${event.eventId}`,
-      kind: event.assist?.smartSeries ? "habit" : "task",
-      taskId: event.assist?.taskId,
-      habitId: event.assist?.seriesLineageId,
-      title: event.title,
-      start: event.eventStart,
-      end: event.eventEnd,
-      calendar: calendarNames.get(event.calendarId) ?? event.calendarId,
-      locked: Boolean(event.assist?.pinned),
-    };
-  }
-
-  async function loadBlock(id: string) {
-    const { calendarId, eventId } = parseBlockId(id);
-    const event = await reclaim.get<any>(`/events/${calendarId}/${eventId}`);
-    if (!event?.assist?.task && !event?.assist?.smartSeries) {
-      throw new Error(`${id} is not a Reclaim task or habit block`);
-    }
-    return { calendarId, eventId, event, isHabit: Boolean(event.assist.smartSeries) };
-  }
-
-  // Reclaim applies planner actions in the background, usually within 5 to 15 seconds.
-  async function settledBlock(id: string, done: (block: ReturnType<typeof summarizeBlock>) => boolean) {
-    const { calendarId, eventId } = parseBlockId(id);
-    const calendarNames = await loadCalendarNames();
-    const deadline = Date.now() + settleMs;
-    for (;;) {
-      const event = await reclaim.get<any>(`/events/${calendarId}/${eventId}`).catch((error) => {
-        if (error instanceof ReclaimApiError && error.status === 404) return null;
-        throw error;
-      });
-      if (event === null) return { blockId: id, note: "The block has a new id now; run list_blocks to see it." };
-      const block = summarizeBlock(event, calendarNames);
-      if (done(block)) return block;
-      if (Date.now() >= deadline) {
-        return { ...block, note: "Reclaim has not applied this yet; check list_blocks in a few seconds." };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2_500));
-    }
-  }
-
-  async function settledTaskBlocks(taskId: number, startAt: string) {
-    const calendarNames = await loadCalendarNames();
-    const day = Date.parse(startAt);
-    const range = { start: isoDate(day - DAY_MS), end: isoDate(day + 2 * DAY_MS), allConnected: true };
-    const deadline = Date.now() + settleMs;
-    for (;;) {
-      const events = await reclaim.get<any[]>("/events", range);
-      const blocks = events.filter((e) => e.assist?.taskId === taskId).map((e) => summarizeBlock(e, calendarNames));
-      if (blocks.some((b) => Date.parse(b.start) === day)) return { blocks };
-      if (Date.now() >= deadline) {
-        return { blocks, note: "Reclaim has not placed the block yet; check list_blocks in a few seconds." };
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2_500));
-    }
   }
 
   server.registerTool(
@@ -192,7 +118,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
         patch.policy = { ...current.policy, dayHours: applyWindows(current.policy?.dayHours ?? {}, days) };
       }
       if (taskCalendar !== undefined) {
-        patch.taskTargetCalendarId = resolveCalendar(await loadCalendarNames(), taskCalendar);
+        patch.taskTargetCalendarId = resolveCalendar(await loadCalendarNames(reclaim), taskCalendar);
       }
       await reclaim.patch(`/timeschemes/${target.id}`, patch);
       return text(summarizeHours(await reclaim.get<any>(`/timeschemes/${target.id}`)));
@@ -251,7 +177,8 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       const created = await reclaim.post<{ task: ApiTask }>("/tasks/at-time", payload, {
         startTime: new Date(startAt).toISOString(),
       });
-      return text({ task: summarizeTask(created.task, hoursById), ...(await settledTaskBlocks(created.task.id, startAt)) });
+      const placed = await settledTaskBlocks(reclaim, created.task.id, startAt, settleMs);
+      return text({ task: summarizeTask(created.task, hoursById), ...placed });
     },
   );
 
@@ -317,12 +244,12 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       const now = Date.now();
       const [events, calendarNames] = await Promise.all([
         reclaim.get<any[]>("/events", { start: isoDate(now), end: isoDate(now + (days + 1) * DAY_MS), allConnected: true }),
-        loadCalendarNames(),
+        loadCalendarNames(reclaim),
       ]);
       const calendarId = calendar === undefined ? undefined : resolveCalendar(calendarNames, calendar);
       return text(
         events
-          .filter((e) => e.assist?.task || e.assist?.smartSeries)
+          .filter(isReclaimBlock)
           .filter((e) => taskId === undefined || e.assist.taskId === taskId)
           .filter((e) => habitId === undefined || e.assist.seriesLineageId === habitId)
           .filter((e) => calendarId === undefined || e.calendarId === calendarId)
@@ -341,11 +268,11 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       annotations: { idempotentHint: true },
     },
     async ({ blockId: id, start }) => {
-      const { calendarId, eventId, event, isHabit } = await loadBlock(id);
+      const { calendarId, eventId, event, isHabit } = await loadBlock(reclaim, id);
       if (start === undefined) {
         if (isHabit) await reclaim.post(`/smart-habits/planner/${eventId}/lock`);
         else await reclaim.post(`/planner/event/${calendarId}/${eventId}/pin`, {});
-        return text(await settledBlock(id, (b) => b.locked));
+        return text(await settledBlock(reclaim, id, (b) => b.locked, settleMs));
       }
       const length = Date.parse(event.eventEnd) - Date.parse(event.eventStart);
       const window = {
@@ -359,7 +286,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
         await reclaim.post(`/planner/event/${calendarId}/${eventId}/move`, undefined, window);
         await reclaim.post(`/planner/event/${calendarId}/${eventId}/pin`, {});
       }
-      return text(await settledBlock(id, (b) => b.locked && Date.parse(b.start) === Date.parse(start)));
+      return text(await settledBlock(reclaim, id, (b) => b.locked && Date.parse(b.start) === Date.parse(start), settleMs));
     },
   );
 
@@ -372,10 +299,10 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       annotations: { idempotentHint: true },
     },
     async ({ blockId: id }) => {
-      const { calendarId, eventId, isHabit } = await loadBlock(id);
+      const { calendarId, eventId, isHabit } = await loadBlock(reclaim, id);
       if (isHabit) await reclaim.post(`/smart-habits/planner/${eventId}/unlock`);
       else await reclaim.post(`/planner/event/${calendarId}/${eventId}/unpin`, {});
-      return text(await settledBlock(id, (b) => !b.locked));
+      return text(await settledBlock(reclaim, id, (b) => !b.locked, settleMs));
     },
   );
 
@@ -392,7 +319,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       name,
       { title: description.split(" (")[0], description, inputSchema: z.object({ blockId }) },
       async ({ blockId: id }) => {
-        const { eventId, isHabit } = await loadBlock(id);
+        const { eventId, isHabit } = await loadBlock(reclaim, id);
         if (!isHabit) throw new Error(`${id} is a task block, not a habit block`);
         await reclaim.post(`/smart-habits/planner/${eventId}/${action}`);
         return text({ blockId: id, [action === "skip" ? "skipped" : "done"]: true });
@@ -408,7 +335,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const [habits, calendarNames] = await Promise.all([reclaim.get<any[]>("/smart-habits"), loadCalendarNames()]);
+      const [habits, calendarNames] = await Promise.all([reclaim.get<any[]>("/smart-habits"), loadCalendarNames(reclaim)]);
       return text(habits.map((h) => summarizeHabit(h, calendarNames)));
     },
   );
@@ -433,7 +360,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       }),
     },
     async ({ hours: hoursRef, calendar, ...rest }) => {
-      const [allHours, calendarNames] = await Promise.all([loadHours(), loadCalendarNames()]);
+      const [allHours, calendarNames] = await Promise.all([loadHours(), loadCalendarNames(reclaim)]);
       const payload = toHabitPayload({
         ...rest,
         hours: resolveHours(allHours, hoursRef),
@@ -468,7 +395,7 @@ export function createServer(reclaim: ReclaimClient, options: { settleMs?: numbe
       const [current, allHours, calendarNames] = await Promise.all([
         reclaim.get<any>(`/smart-habits/${habitId}`),
         loadHours(),
-        loadCalendarNames(),
+        loadCalendarNames(reclaim),
       ]);
       const series = current.activeSeries ?? current.series;
       const patch = toHabitPatch(
