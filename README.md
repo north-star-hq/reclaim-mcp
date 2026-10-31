@@ -11,7 +11,7 @@ Unofficial: not affiliated with or endorsed by Reclaim.ai. MIT licensed.
 | `list_hours` | Hours with their weekly windows and the calendar tasks land on |
 | `update_hours` | Change one Hours' weekly windows (only the days you pass) and/or the calendar its tasks land on |
 | `list_tasks`, `get_task` | Tasks with durations and block sizes in minutes, and whether Reclaim flags them at risk |
-| `create_task`, `update_task` | Title, total minutes, min/max block minutes, Hours by name, Work/Personal, due, not-before, priority, notes; `startAt` books the first block at an exact time |
+| `create_task`, `update_task` | Title, total minutes, min/max block minutes, Hours by name, Work/Personal, due, not-before, priority, notes, block color; `startAt` books the first block at an exact time |
 | `complete_task`, `delete_task` | Mark done, or delete with its blocks |
 | `list_blocks` | Scheduled task and habit blocks: time, calendar, locked, and the `blockId` the block tools take |
 | `lock_block`, `unlock_block` | Lock a block where it is or at a new start time, or let Reclaim move it again |
@@ -42,9 +42,38 @@ The server reads `RECLAIM_API_KEY` from the environment first, then the Keychain
 
 In claude.ai, add a custom connector with the URL `https://<deployment>/api/mcp` and a request header `Authorization: Bearer <your secret>`. It then appears in the mobile apps too.
 
+## Use as a library
+
+The Reclaim client and the helpers the tools use can be imported from another Node 24 package. Install from a tag; `prepare` compiles `dist/` with type declarations during the install.
+
+```sh
+npm install github:north-star-hq/reclaim-mcp#v0.2.0
+```
+
+```ts
+import { createReclaimClient } from "reclaim-mcp/reclaim";
+import { summarizeHours } from "reclaim-mcp/hours";
+
+const reclaim = createReclaimClient(process.env.RECLAIM_API_KEY!);
+const hours = (await reclaim.get<any[]>("/timeschemes")).map(summarizeHours);
+```
+
+| Import | What it has |
+|---|---|
+| `reclaim-mcp/reclaim` | `createReclaimClient(apiKey, fetchImpl?)`, `ReclaimApiError` |
+| `reclaim-mcp/tasks` | Task payloads and summaries, Hours lookup by name, minute/chunk conversion, `EVENT_COLORS` |
+| `reclaim-mcp/habits` | Habit payloads, patches and summaries |
+| `reclaim-mcp/hours` | Hours summaries and weekly window edits |
+| `reclaim-mcp/blocks` | `blockId` parsing, block summaries, and waiting for Reclaim to apply a block change |
+| `reclaim-mcp/calendars` | Calendar names by id, and calendar lookup by name |
+| `reclaim-mcp` | All of the above |
+
+The package ships compiled JavaScript because Node 24 refuses to strip types from `.ts` files under `node_modules`.
+
 ## Checks
 
 ```sh
 npm test
 npm run typecheck
+npm run build
 ```

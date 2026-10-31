@@ -1,15 +1,51 @@
 {
   "name": "reclaim-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./reclaim": {
+      "types": "./dist/reclaim.d.ts",
+      "default": "./dist/reclaim.js"
+    },
+    "./tasks": {
+      "types": "./dist/tasks.d.ts",
+      "default": "./dist/tasks.js"
+    },
+    "./habits": {
+      "types": "./dist/habits.d.ts",
+      "default": "./dist/habits.js"
+    },
+    "./hours": {
+      "types": "./dist/hours.d.ts",
+      "default": "./dist/hours.js"
+    },
+    "./blocks": {
+      "types": "./dist/blocks.d.ts",
+      "default": "./dist/blocks.js"
+    },
+    "./calendars": {
+      "types": "./dist/calendars.d.ts",
+      "default": "./dist/calendars.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": "24.x"
   },
   "scripts": {
     "start": "node src/stdio.ts",
     "test": "node --test 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",
